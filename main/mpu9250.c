@@ -148,8 +148,8 @@ void mpu9250_task(void *arg) {
         mag_y = (mag_data[3] << 8) | mag_data[2];  // Little endian
         mag_z = (mag_data[5] << 8) | mag_data[4];  // Little endian
 
-        printf("Accel: X=%d, Y=%d, Z=%d, Gyro: X=%d, Y=%d, Z=%d, Mag: X=%d, Y=%d, Z=%d\n",
-               accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z, mag_x, mag_y, mag_z);
+        printf("Accel: X=%6d, Y=%6d, Z=%6d, Gyro: X=%6d, Y=%6d, Z=%6d, Mag: X=%6d, Y=%6d, Z=%6d\n",
+            accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z, mag_x, mag_y, mag_z);
 
         vTaskDelay(500 / portTICK_PERIOD_MS);
     }
