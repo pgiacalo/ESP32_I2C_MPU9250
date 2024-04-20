@@ -1,5 +1,5 @@
 /*
-    ESP32 code for the MPU-9250 module (3 axis accelerator, 3 axis gyro and 3 axis magnetometer)
+    ESP32 code using I2C to communicate with the MPU-9250 module (3 axis accelerator, 3 axis gyro and 3 axis magnetometer)
     This code prints out the values from all three MPU-9250 sensors to the console.
 
     MPU-9250 module product information
