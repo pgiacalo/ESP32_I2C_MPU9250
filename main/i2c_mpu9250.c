@@ -15,6 +15,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/i2c.h"
+// #include "driver/i2c_master.h"       //use this new driver instead of driver/i2c.h
 #include "esp_system.h"
 
 #define I2C_MASTER_SCL_IO    19               /*!< gpio number for I2C master clock */
@@ -114,9 +115,15 @@ void mpu9250_task(void *arg) {
     int16_t mag_x, mag_y, mag_z;
 
     // Initialize MPU9250
-    mpu9250_write_byte(MPU9250_SENSOR_ADDR, MPU9250_REG_PWR_MGMT_1, 0x00);  // Wake up the MPU9250
+    esp_err_t ret = mpu9250_write_byte(MPU9250_SENSOR_ADDR, MPU9250_REG_PWR_MGMT_1, 0x00);  // Wake up the MPU9250
+    if (ret != ESP_OK) {
+        printf("1) Failed to initialize MPU9250 : %s\n", esp_err_to_name(ret));
+    }
     // Set up the AK8963
-    mpu9250_write_byte(AK8963_SENSOR_ADDR, AK8963_REG_CNTL1, AK8963_BIT_16 | AK8963_MODE_CONTINUOUS_2);
+    ret = mpu9250_write_byte(AK8963_SENSOR_ADDR, AK8963_REG_CNTL1, AK8963_BIT_16 | AK8963_MODE_CONTINUOUS_2);
+    if (ret != ESP_OK) {
+        printf("2) Failed to initialize MPU9250 : %s\n", esp_err_to_name(ret));
+    }
 
     /*
     Converting Raw Sensor Data:
@@ -171,7 +178,11 @@ static esp_err_t set_accel_range(uint8_t fs_sel) {
     if (fs_sel > 3) {
         return ESP_ERR_INVALID_ARG;
     }
-    return mpu9250_write_byte(MPU9250_SENSOR_ADDR, ACCEL_CONFIG, fs_sel << 3);
+    esp_err_t ret = mpu9250_write_byte(MPU9250_SENSOR_ADDR, ACCEL_CONFIG, fs_sel << 3);
+    if (ret != ESP_OK) {
+        printf("Failed to set_accel_range: %s\n", esp_err_to_name(ret));
+    }
+    return ret;
 }
 
 
@@ -189,7 +200,12 @@ static esp_err_t set_gyro_range(uint8_t fs_sel) {
     if (fs_sel > 3) {
         return ESP_ERR_INVALID_ARG;
     }
-    return mpu9250_write_byte(MPU9250_SENSOR_ADDR, GYRO_CONFIG, fs_sel << 3);
+    esp_err_t ret = mpu9250_write_byte(MPU9250_SENSOR_ADDR, GYRO_CONFIG, fs_sel << 3);
+    if (ret != ESP_OK) {
+        printf("Failed to set_gyro_range: %s\n", esp_err_to_name(ret));
+    }
+    return ret;
+
 }
 
 
@@ -207,7 +223,11 @@ static esp_err_t set_gyro_range(uint8_t fs_sel) {
  * Example: set_ak8963_mode(0x06);  //set the AK8963 to continuous measurement mode 2
  */
 static esp_err_t set_ak8963_mode(uint8_t mode) {
-    return mpu9250_write_byte(AK8963_SENSOR_ADDR, AK8963_CNTL1, mode);
+    esp_err_t ret =   mpu9250_write_byte(AK8963_SENSOR_ADDR, AK8963_CNTL1, mode);
+    if (ret != ESP_OK) {
+        printf("Failed to set_ak8963_mode: %s\n", esp_err_to_name(ret));
+    }
+    return ret;    
 }
 
 
