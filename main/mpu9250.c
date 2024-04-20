@@ -1,3 +1,16 @@
+/*
+    ESP32 code for the MPU-9250 module (3 axis accelerator, 3 axis gyro and 3 axis magnetometer)
+    This code prints out the values from all three MPU-9250 sensors to the console.
+
+    MPU-9250 module product information
+    https://www.amazon.com/dp/B01I1J0Z7Y?psc=1&ref=ppx_yo2ov_dt_b_product_details
+
+    Power voltage: 3~5V
+    Communication mode: I2C / SPI; Gyro range: +/-250, +/-500, +/-1000, +/-2000dps
+    Accelerator range: +/-2G, +/-4G, +/-8G, +/-16G
+    Magnetometer range: +/-4800uF
+*/
+
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -144,7 +157,7 @@ void mpu9250_task(void *arg) {
 
 
 /**
- * @brief Set the full-scale range of the accelerometer.
+ * @brief Set the full-scale range of the accelerometer. Accelerator range: +/-2G, +/-4G, +/-8G, +/-16G.
  * @param fs_sel Full-scale range selection (0=±2g, 1=±4g, 2=±8g, 3=±16g)
  * Default = 0 (±2g Full-Scale Range)
  *  0b00: ±2g
@@ -163,7 +176,7 @@ static esp_err_t set_accel_range(uint8_t fs_sel) {
 
 
 /**
- * @brief Set the full-scale range of the gyroscope.
+ * @brief Set the full-scale range of the gyroscope. Gyro range: +/-250, +/-500, +/-1000, +/-2000dps.
  * @param fs_sel Full-scale range selection (0=±250°/s, 1=±500°/s, 2=±1000°/s, 3=±2000°/s)
  *  0b00: ±250 degrees per second
  *  0b01: ±500 degrees per second
@@ -181,7 +194,7 @@ static esp_err_t set_gyro_range(uint8_t fs_sel) {
 
 
 /**
- * @brief Set the mode of the AK8963 magnetometer.
+ * @brief Set the mode of the AK8963 magnetometer. Magnetometer range: +/-4800uF
  * @param mode Magnetometer mode (e.g., 0x02 for single measurement, 0x06 for continuous mode 2)
  *  0x00: Power-down mode
  *  0x01: Single measurement mode
