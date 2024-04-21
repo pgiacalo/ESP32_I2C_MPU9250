@@ -1,12 +1,15 @@
 /*
-    ESP32 code using I2C to communicate with the MPU-9250 module (3 axis accelerator, 3 axis gyro and 3 axis magnetometer)
+    ESP32 code for the MPU-9250 using I2C to communicate (the MPU-9250 has a 3 axis accelerator, 3 axis gyro and a 3 axis magnetometer)
     This code prints out the values from all three MPU-9250 sensors to the console.
 
-    MPU-9250 module product information
-    https://www.amazon.com/dp/B01I1J0Z7Y?psc=1&ref=ppx_yo2ov_dt_b_product_details
+    Recommendation: Power the MPU-9250 with 5 volts from the ESP32 (the MPU-9250 magnetometer can freeze when using 3.3 volts). 
 
-    Power voltage: 3~5V
-    Communication mode: I2C / SPI; Gyro range: +/-250, +/-500, +/-1000, +/-2000dps
+    Link to the MPU-9250 module used for this code development:
+        https://www.amazon.com/dp/B01I1J0Z7Y?psc=1&ref=ppx_yo2ov_dt_b_product_details
+
+    Power voltage: 3.3V to 5V
+    Communication mode: I2C 
+    Gyro range: +/-250, +/-500, +/-1000, +/-2000dps
     Accelerator range: +/-2G, +/-4G, +/-8G, +/-16G
     Magnetometer range: +/-4800uF
 */
