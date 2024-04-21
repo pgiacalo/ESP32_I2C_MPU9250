@@ -88,28 +88,61 @@ static esp_err_t mpu9250_write_byte(uint8_t sensor_addr, uint8_t reg_addr, uint8
  */
 static esp_err_t mpu9250_read_bytes(uint8_t sensor_addr, uint8_t reg_addr, uint8_t *data, uint8_t len) {
     int i2c_master_port = I2C_MASTER_NUM;
-    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    esp_err_t ret;
+    i2c_cmd_handle_t cmd;
+
+    // Start a command link for the address setting phase
+    cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, sensor_addr << 1 | WRITE_BIT, ACK_CHECK_EN);
-    i2c_master_write_byte(cmd, reg_addr, ACK_CHECK_EN);
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, sensor_addr << 1 | READ_BIT, ACK_CHECK_EN);
-    if (len > 1) {
-        i2c_master_read(cmd, data, len - 1, ACK_VAL);
+    i2c_master_write_byte(cmd, sensor_addr << 1 | WRITE_BIT, ACK_CHECK_EN);  // Send the device address with the write option
+    i2c_master_write_byte(cmd, reg_addr, ACK_CHECK_EN);                     // Send the register address
+    i2c_master_stop(cmd);                                                   // Stop after writing the register address
+    ret = i2c_master_cmd_begin(i2c_master_port, cmd, 1000 / portTICK_PERIOD_MS);  // Execute the command
+    i2c_cmd_link_delete(cmd);                                               // Clean up command link
+
+    if (ret != ESP_OK) {
+        return ret;  // Return error if address setting phase failed
     }
-    i2c_master_read_byte(cmd, data + len - 1, NACK_VAL);
-    i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(i2c_master_port, cmd, 1000 / portTICK_PERIOD_MS);
-    i2c_cmd_link_delete(cmd);
-    return ret;
+
+    // Start another command link for the reading phase
+    cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, sensor_addr << 1 | READ_BIT, ACK_CHECK_EN);  // Send the device address with the read option
+    if (len > 1) {
+        i2c_master_read(cmd, data, len - 1, ACK_VAL);                       // Read data bytes with ACK
+    }
+    i2c_master_read_byte(cmd, data + len - 1, NACK_VAL);                    // Read the last byte with NACK
+    i2c_master_stop(cmd);                                                   // Stop after reading the data
+    ret = i2c_master_cmd_begin(i2c_master_port, cmd, 1000 / portTICK_PERIOD_MS);  // Execute the command
+    i2c_cmd_link_delete(cmd);                                               // Clean up command link
+
+    return ret;  // Return the result of the reading phase
 }
+
+// static esp_err_t mpu9250_read_bytes(uint8_t sensor_addr, uint8_t reg_addr, uint8_t *data, uint8_t len) {
+//     int i2c_master_port = I2C_MASTER_NUM;
+//     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+//     i2c_master_start(cmd);
+//     i2c_master_write_byte(cmd, sensor_addr << 1 | WRITE_BIT, ACK_CHECK_EN);
+//     i2c_master_write_byte(cmd, reg_addr, ACK_CHECK_EN);
+//     i2c_master_start(cmd);
+//     i2c_master_write_byte(cmd, sensor_addr << 1 | READ_BIT, ACK_CHECK_EN);
+//     if (len > 1) {
+//         i2c_master_read(cmd, data, len - 1, ACK_VAL);
+//     }
+//     i2c_master_read_byte(cmd, data + len - 1, NACK_VAL);
+//     i2c_master_stop(cmd);
+//     esp_err_t ret = i2c_master_cmd_begin(i2c_master_port, cmd, 1000 / portTICK_PERIOD_MS);
+//     i2c_cmd_link_delete(cmd);
+//     return ret;
+// }
 
 /**
  * @brief Task to continuously read sensor data
  */
 void mpu9250_task(void *arg) {
-    uint8_t sensor_data[14];  // Buffer for accelerometer and gyroscope
-    uint8_t mag_data[7];      // Buffer for magnetometer
+    uint8_t sensor_data[14];    // Buffer for accelerometer and gyroscope
+    uint8_t mag_data[7];        // Buffer for magnetometer
     int16_t accel_x, accel_y, accel_z;
     int16_t gyro_x, gyro_y, gyro_z;
     int16_t mag_x, mag_y, mag_z;
@@ -121,6 +154,7 @@ void mpu9250_task(void *arg) {
     }
     // Set up the AK8963
     ret = mpu9250_write_byte(AK8963_SENSOR_ADDR, AK8963_REG_CNTL1, AK8963_BIT_16 | AK8963_MODE_CONTINUOUS_2);
+
     if (ret != ESP_OK) {
         printf("2) Failed to initialize MPU9250 : %s\n", esp_err_to_name(ret));
     }
@@ -150,10 +184,14 @@ void mpu9250_task(void *arg) {
         // Read magnetometer data
         mpu9250_read_bytes(AK8963_SENSOR_ADDR, AK8963_REG_HXL, mag_data, 7);
 
-        // Parse magnetometer data
-        mag_x = (mag_data[1] << 8) | mag_data[0];  // Little endian
-        mag_y = (mag_data[3] << 8) | mag_data[2];  // Little endian
-        mag_z = (mag_data[5] << 8) | mag_data[4];  // Little endian
+        // Parse magnetometer data (it is little endian) and convert from unsigned to signed values
+        mag_x = (int16_t)((uint16_t)mag_data[1] << 8 | (uint16_t)mag_data[0]);
+        mag_y = (int16_t)((uint16_t)mag_data[3] << 8 | (uint16_t)mag_data[2]);
+        mag_z = (int16_t)((uint16_t)mag_data[5] << 8 | (uint16_t)mag_data[4]);
+
+        // mag_x = (mag_data[1] << 8) | mag_data[0];  // Little endian
+        // mag_y = (mag_data[3] << 8) | mag_data[2];  // Little endian
+        // mag_z = (mag_data[5] << 8) | mag_data[4];  // Little endian
 
         printf("Accel: X=%6d, Y=%6d, Z=%6d, Gyro: X=%6d, Y=%6d, Z=%6d, Mag: X=%6d, Y=%6d, Z=%6d\n",
             accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z, mag_x, mag_y, mag_z);
@@ -223,11 +261,25 @@ static esp_err_t set_gyro_range(uint8_t fs_sel) {
  * Example: set_ak8963_mode(0x06);  //set the AK8963 to continuous measurement mode 2
  */
 static esp_err_t set_ak8963_mode(uint8_t mode) {
-    esp_err_t ret =   mpu9250_write_byte(AK8963_SENSOR_ADDR, AK8963_CNTL1, mode);
+
+    // Reset AK8963
+    mpu9250_write_byte(AK8963_SENSOR_ADDR, AK8963_REG_CNTL1, 0x01); // Reset device
+    vTaskDelay(100 / portTICK_PERIOD_MS); // Delay to allow reset to complete
+    // Reinitialize AK8963
+    esp_err_t ret = mpu9250_write_byte(AK8963_SENSOR_ADDR, AK8963_REG_CNTL1, AK8963_BIT_16 | AK8963_MODE_CONTINUOUS_2);
+
+    // esp_err_t ret = mpu9250_write_byte(AK8963_SENSOR_ADDR, AK8963_CNTL1, mode);
     if (ret != ESP_OK) {
         printf("Failed to set_ak8963_mode: %s\n", esp_err_to_name(ret));
     }
-    return ret;    
+    return ret;
+}
+
+/**
+ * Enables the magnetometer bypass mode
+ */
+static esp_err_t enable_bypass(void) {
+    return mpu9250_write_byte(MPU9250_SENSOR_ADDR, 0x37, 0x02);  // INT_PIN_CFG register set to enable bypass mode
 }
 
 
@@ -242,7 +294,8 @@ void app_main(void) {
     set_gyro_range(0);  // 0b00 corresponds to ±250°/s
 
     // Set AK8963 to default mode (Continuous Measurement Mode 1 at 8 Hz)
-    set_ak8963_mode(0x02);  // 0x02 corresponds to Continuous Measurement Mode 1
+    enable_bypass(); // Call this after initializing the I2C and before setting the AK8963 mode
+    set_ak8963_mode(AK8963_MODE_CONTINUOUS_2);  
 
     // Create the task to handle MPU9250 data reading and processing
     xTaskCreate(mpu9250_task, "mpu9250_task", 4096, NULL, 10, NULL);
