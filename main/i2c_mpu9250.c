@@ -124,24 +124,6 @@ static esp_err_t mpu9250_read_bytes(uint8_t sensor_addr, uint8_t reg_addr, uint8
     return ret;  // Return the result of the reading phase
 }
 
-// static esp_err_t mpu9250_read_bytes(uint8_t sensor_addr, uint8_t reg_addr, uint8_t *data, uint8_t len) {
-//     int i2c_master_port = I2C_MASTER_NUM;
-//     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-//     i2c_master_start(cmd);
-//     i2c_master_write_byte(cmd, sensor_addr << 1 | WRITE_BIT, ACK_CHECK_EN);
-//     i2c_master_write_byte(cmd, reg_addr, ACK_CHECK_EN);
-//     i2c_master_start(cmd);
-//     i2c_master_write_byte(cmd, sensor_addr << 1 | READ_BIT, ACK_CHECK_EN);
-//     if (len > 1) {
-//         i2c_master_read(cmd, data, len - 1, ACK_VAL);
-//     }
-//     i2c_master_read_byte(cmd, data + len - 1, NACK_VAL);
-//     i2c_master_stop(cmd);
-//     esp_err_t ret = i2c_master_cmd_begin(i2c_master_port, cmd, 1000 / portTICK_PERIOD_MS);
-//     i2c_cmd_link_delete(cmd);
-//     return ret;
-// }
-
 /**
  * @brief Task to continuously read sensor data
  */
@@ -193,10 +175,6 @@ void mpu9250_task(void *arg) {
         mag_x = (int16_t)((uint16_t)mag_data[1] << 8 | (uint16_t)mag_data[0]);
         mag_y = (int16_t)((uint16_t)mag_data[3] << 8 | (uint16_t)mag_data[2]);
         mag_z = (int16_t)((uint16_t)mag_data[5] << 8 | (uint16_t)mag_data[4]);
-
-        // mag_x = (mag_data[1] << 8) | mag_data[0];  // Little endian
-        // mag_y = (mag_data[3] << 8) | mag_data[2];  // Little endian
-        // mag_z = (mag_data[5] << 8) | mag_data[4];  // Little endian
 
         printf("Accel: X=%6d, Y=%6d, Z=%6d, Gyro: X=%6d, Y=%6d, Z=%6d, Mag: X=%6d, Y=%6d, Z=%6d\n",
             accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z, mag_x, mag_y, mag_z);
