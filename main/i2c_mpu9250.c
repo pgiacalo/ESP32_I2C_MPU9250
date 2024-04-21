@@ -2,16 +2,17 @@
     ESP32 code for the MPU-9250 using I2C to communicate (the MPU-9250 has a 3 axis accelerator, 3 axis gyro and a 3 axis magnetometer)
     This code prints out the values from all three MPU-9250 sensors to the console.
 
-    Recommendation: Power the MPU-9250 with 5 volts from the ESP32 (the MPU-9250 magnetometer can freeze when using 3.3 volts). 
+    RECOMMENDATION: Power the MPU-9250 with 5 volts from the ESP32 (the MPU-9250 magnetometer can freeze, if using 3.3 volts). 
 
     Link to the MPU-9250 module used for this code development:
         https://www.amazon.com/dp/B01I1J0Z7Y?psc=1&ref=ppx_yo2ov_dt_b_product_details
 
-    Power voltage: 3.3V to 5V
-    Communication mode: I2C 
-    Gyro range: +/-250, +/-500, +/-1000, +/-2000dps
-    Accelerator range: +/-2G, +/-4G, +/-8G, +/-16G
-    Magnetometer range: +/-4800uF
+    MPU-9250 hardware specs:
+        Power voltage: 3.3V to 5V   (I recommend using 5 volts)
+        Communication mode: I2C     (SPI is also supported but NOT by this code)
+        Gyro range: +/-250, +/-500, +/-1000, +/-2000dps
+        Accelerator range: +/-2G, +/-4G, +/-8G, +/-16G
+        Magnetometer range: +/-4800uF
 */
 
 #include <stdio.h>
@@ -23,6 +24,7 @@
 
 #define I2C_MASTER_SCL_IO    19               /*!< gpio number for I2C master clock */
 #define I2C_MASTER_SDA_IO    18               /*!< gpio number for I2C master data  */
+
 #define I2C_MASTER_NUM       I2C_NUM_0        /*!< I2C port number for master dev */
 #define I2C_MASTER_FREQ_HZ   400000           /*!< I2C master clock frequency */
 #define I2C_MASTER_TX_BUF_DISABLE   0         /*!< I2C master do not need buffer */
@@ -94,7 +96,7 @@ static esp_err_t mpu9250_read_bytes(uint8_t sensor_addr, uint8_t reg_addr, uint8
     esp_err_t ret;
     i2c_cmd_handle_t cmd;
 
-    // Start a command link for the address setting phase
+    // Start a command link transaction for the address setting phase
     cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
     i2c_master_write_byte(cmd, sensor_addr << 1 | WRITE_BIT, ACK_CHECK_EN);  // Send the device address with the write option
@@ -107,7 +109,7 @@ static esp_err_t mpu9250_read_bytes(uint8_t sensor_addr, uint8_t reg_addr, uint8
         return ret;  // Return error if address setting phase failed
     }
 
-    // Start another command link for the reading phase
+    // Start another command link transaction for the reading phase
     cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
     i2c_master_write_byte(cmd, sensor_addr << 1 | READ_BIT, ACK_CHECK_EN);  // Send the device address with the read option
