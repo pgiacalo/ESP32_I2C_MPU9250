@@ -333,8 +333,11 @@ void mpu9250_task(void *arg) {
         if (heading > 360) heading -= 360;
         if (heading < 0) heading += 360; // Normalize heading between 0 and 360 degrees
 
-        printf("Accel: X=%.2f G, Y=%.2f G, Z=%.2f G, Gyro: X=%.2f deg/s, Y=%.2f deg/s, Z=%.2f deg/s, Heading=%.2f°, Pitch=%.2f°, Roll=%.2f°\n",
-               accel_x_g, accel_y_g, accel_z_g, gyro_x_dps, gyro_y_dps, gyro_z_dps, heading, pitch, roll);
+        printf("Accel: X=%7.2f G, Y=%7.2f G, Z=%7.2f G   |   Gyro: X=%7.2f deg/s, Y=%7.2f deg/s, Z=%7.2f deg/s   |   Heading=%7.2f°, Pitch=%7.2f°, Roll=%7.2f°\n",
+               accel_x_g, accel_y_g, accel_z_g, 
+               gyro_x_dps, gyro_y_dps, gyro_z_dps, 
+               heading, pitch, roll);
+
                 
         // float mag_sensitivity = get_mag_sensitivity();  // Each LSB corresponds to 0.15 µT typical value for AK8963 in 16-bit output mode
         // float mag_x_uT = mag_x * mag_sensitivity; // Magnetic field strength in microtesla
