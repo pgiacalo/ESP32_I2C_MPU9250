@@ -20,12 +20,12 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/i2c.h"
-// #include "driver/i2c_master.h"       //use this new driver instead of driver/i2c.h
+// #include "driver/i2c_master.h"           //the newer I2C driver
 #include "esp_system.h"
 #include <math.h>
 
 // Magnetic declination in decimal degrees (adjust this value based on your location)
-const float magnetic_declination = 12.85;      //decimal value in degrees (in San Jose, CA)
+const float magnetic_declination = 12.85;      //in San Jose, CA
 
 #define I2C_MASTER_SCL_IO    19               /*!< gpio number for I2C master clock */
 #define I2C_MASTER_SDA_IO    18               /*!< gpio number for I2C master data  */
@@ -131,15 +131,9 @@ static esp_err_t mpu9250_read_bytes(uint8_t sensor_addr, uint8_t reg_addr, uint8
 
 
 /**
- * @brief Set the full-scale range of the accelerometer. Accelerator range: +/-2G, +/-4G, +/-8G, +/-16G.
+ * @brief Set the full-scale range of the accelerometer.
  * @param fs_sel Full-scale range selection (0=±2g, 1=±4g, 2=±8g, 3=±16g)
- * Default = 0 (±2g Full-Scale Range)
- *  0b00: ±2g
- *  0b01: ±4g
- *  0b10: ±8g
- *  0b11: ±16g
- * 
- * Example: set_accel_range(3); //sets +/-16g full scale range
+ * Example: set_accel_range(3); // Sets to ±16g full-scale range
  */
 static esp_err_t set_accel_range(uint8_t fs_sel) {
     if (fs_sel > 3) {
@@ -159,29 +153,19 @@ float get_accel_sensitivity() {
     mpu9250_read_bytes(MPU9250_SENSOR_ADDR, ACCEL_CONFIG, &accel_sensitivity_setting, 1);
 
     switch (accel_sensitivity_setting & 0x18) {
-        case 0x00:  // ±2g
-            return 2.0 / 32768.0;
-        case 0x08:  // ±4g
-            return 4.0 / 32768.0;
-        case 0x10:  // ±8g
-            return 8.0 / 32768.0;
-        case 0x18:  // ±16g
-            return 16.0 / 32768.0;
-        default:
-            return 2.0 / 32768.0;  // Default sensitivity
+        case 0x00: return 2.0 / 32768.0;
+        case 0x08: return 4.0 / 32768.0;
+        case 0x10: return 8.0 / 32768.0;
+        case 0x18: return 16.0 / 32768.0;
+        default:   return 2.0 / 32768.0;  // Default sensitivity
     }
 }
 
 
 /**
- * @brief Set the full-scale range of the gyroscope. Gyro range: +/-250, +/-500, +/-1000, +/-2000dps.
+ * @brief Set the full-scale range of the gyroscope.
  * @param fs_sel Full-scale range selection (0=±250°/s, 1=±500°/s, 2=±1000°/s, 3=±2000°/s)
- *  0b00: ±250 degrees per second
- *  0b01: ±500 degrees per second
- *  0b10: ±1000 degrees per second
- *  0b11: ±2000 degrees per second
- * 
- * Example: set_gyro_range(2);  //sets gyroscope to ±1000 degrees per second full scale range
+ * Example: set_gyro_range(2); // Sets gyroscope to ±1000°/s full-scale range
  */
 static esp_err_t set_gyro_range(uint8_t fs_sel) {
     if (fs_sel > 3) {
@@ -192,7 +176,6 @@ static esp_err_t set_gyro_range(uint8_t fs_sel) {
         printf("Failed to set_gyro_range: %s\n", esp_err_to_name(ret));
     }
     return ret;
-
 }
 
 // Function to get gyroscope sensitivity
@@ -226,35 +209,69 @@ float get_gyro_sensitivity() {
  *  0x0F: Self-test mode
  *  0x0B: Fuse ROM access mode
  * 
- * Example: set_ak8963_mode(0x06);  //set the AK8963 to continuous measurement mode 2
+ * @param high_reolution - boolean set to  true for 16 bit resolution, else set to 14 bit
+ * 
+ * Example: set_ak8963_mode(0x06, true);  //set the AK8963 to continuous measurement mode 2 at 16 bit resolution
  */
-static esp_err_t set_ak8963_mode(uint8_t mode) {
+static esp_err_t set_mag_mode_and_resolution(uint8_t mode, bool high_resolution) {
+    uint8_t mode_and_resolution = mode | 0x00; // Default to 14-bit resolution
+    if (high_resolution) {
+        mode_and_resolution = mode | 0x10; // Set to 16-bit resolution
+    }
 
     // Reset AK8963
     mpu9250_write_byte(AK8963_SENSOR_ADDR, AK8963_REG_CNTL1, 0x01); // Reset device
     vTaskDelay(100 / portTICK_PERIOD_MS); // Delay to allow reset to complete
-    // Reinitialize AK8963
-    esp_err_t ret = mpu9250_write_byte(AK8963_SENSOR_ADDR, AK8963_REG_CNTL1, AK8963_BIT_16 | AK8963_MODE_CONTINUOUS_2);
 
-    // esp_err_t ret = mpu9250_write_byte(AK8963_SENSOR_ADDR, AK8963_CNTL1, mode);
+    // Set mode and resolution
+    esp_err_t ret = mpu9250_write_byte(AK8963_SENSOR_ADDR, AK8963_REG_CNTL1, mode_and_resolution);
     if (ret != ESP_OK) {
-        printf("Failed to set_ak8963_mode: %s\n", esp_err_to_name(ret));
+        printf("Failed to set_mag_mode_and_resolution: %s\n", esp_err_to_name(ret));
     }
     return ret;
 }
 
+// static esp_err_t set_mag_mode(uint8_t mode) {
+//     // Reset AK8963
+//     mpu9250_write_byte(AK8963_SENSOR_ADDR, AK8963_REG_CNTL1, 0x01); // Reset device
+//     vTaskDelay(100 / portTICK_PERIOD_MS); // Delay to allow reset to complete
+//     // Set mode after reset
+//     esp_err_t ret = mpu9250_write_byte(AK8963_SENSOR_ADDR, AK8963_REG_CNTL1, mode);
+//     if (ret != ESP_OK) {
+//         printf("Failed to set_mag_mode: %s\n", esp_err_to_name(ret));
+//     }
+//     return ret;
+// }
+
+
+/////////
+//NOTE: There is no magnetometer set_range() function because the AK8963 operates at a fixed range of ±4800 µT (microteslas).
+/////////
+
 // Function to get magnetometer sensitivity
 float get_mag_sensitivity() {
-    uint8_t mag_sensitivity_setting;
-    mpu9250_read_bytes(AK8963_SENSOR_ADDR, AK8963_CNTL1, &mag_sensitivity_setting, 1);
+    uint8_t resolution_setting;
+    mpu9250_read_bytes(AK8963_SENSOR_ADDR, AK8963_REG_CNTL1, &resolution_setting, 1);
 
-    return (mag_sensitivity_setting - 128.0) / 256.0 + 1.0;
+    // Determine if using 16-bit output (0x10) or defaulting to 14-bit
+    if ((resolution_setting & 0x10) == 0x10) {
+        return 0.15; // Sensitivity for 16-bit output in µT/LSB
+    } else {
+        return 0.6; // Sensitivity for 14-bit output in µT/LSB (default)
+    }
 }
+
+// float get_mag_sensitivity() {
+//     uint8_t mag_sensitivity_setting;
+//     mpu9250_read_bytes(AK8963_SENSOR_ADDR, AK8963_CNTL1, &mag_sensitivity_setting, 1);
+
+//     return (mag_sensitivity_setting - 128.0) / 256.0 + 1.0;
+// }
 
 /**
  * Enables the magnetometer bypass mode
  */
-static esp_err_t enable_bypass(void) {
+static esp_err_t enable_mag_bypass(void) {
     return mpu9250_write_byte(MPU9250_SENSOR_ADDR, 0x37, 0x02);  // INT_PIN_CFG register set to enable bypass mode
 }
 
@@ -331,7 +348,6 @@ void mpu9250_task(void *arg) {
 
 
 
-
 void app_main(void) {
     // Initialize the I2C bus for communication
     i2c_master_init();
@@ -342,9 +358,10 @@ void app_main(void) {
     // Set gyroscope to default range ±250 degrees/s
     set_gyro_range(0);  // 0b00 corresponds to ±250°/s
 
-    // Set AK8963 to default mode (Continuous Measurement Mode 1 at 8 Hz)
-    enable_bypass(); // Call this after initializing the I2C and before setting the AK8963 mode
-    set_ak8963_mode(AK8963_MODE_CONTINUOUS_2);  
+    // Set magnetometer
+    enable_mag_bypass(); // Call this after initializing the I2C and before setting the AK8963 mode
+    // Set AK8963 to Continuous Measurement Mode 2
+    set_mag_mode_and_resolution(AK8963_MODE_CONTINUOUS_2, true);   //true means high resolution (16 bit)
 
     // Create the task to handle MPU9250 data reading and processing
     xTaskCreate(mpu9250_task, "mpu9250_task", 4096, NULL, 10, NULL);
