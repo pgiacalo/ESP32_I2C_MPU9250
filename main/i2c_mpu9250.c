@@ -9,7 +9,7 @@
 
     Link to the ESP32 module used:
         https://www.amazon.com/gp/product/B0718T232Z/ref=ppx_yo_dt_b_search_asin_title?ie=UTF8&psc=1
-        
+
     Link to the MPU-9250 module used:
         https://www.amazon.com/dp/B01I1J0Z7Y?psc=1&ref=ppx_yo2ov_dt_b_product_details
 
@@ -236,18 +236,6 @@ static esp_err_t set_mag_mode_and_resolution(uint8_t mode, bool high_resolution)
     return ret;
 }
 
-// static esp_err_t set_mag_mode(uint8_t mode) {
-//     // Reset AK8963
-//     mpu9250_write_byte(AK8963_SENSOR_ADDR, AK8963_REG_CNTL1, 0x01); // Reset device
-//     vTaskDelay(100 / portTICK_PERIOD_MS); // Delay to allow reset to complete
-//     // Set mode after reset
-//     esp_err_t ret = mpu9250_write_byte(AK8963_SENSOR_ADDR, AK8963_REG_CNTL1, mode);
-//     if (ret != ESP_OK) {
-//         printf("Failed to set_mag_mode: %s\n", esp_err_to_name(ret));
-//     }
-//     return ret;
-// }
-
 
 /////////
 //NOTE: There is no magnetometer set_range() function because the AK8963 operates at a fixed range of ±4800 µT (microteslas).
@@ -265,13 +253,6 @@ float get_mag_sensitivity() {
         return 0.6; // Sensitivity for 14-bit output in µT/LSB (default)
     }
 }
-
-// float get_mag_sensitivity() {
-//     uint8_t mag_sensitivity_setting;
-//     mpu9250_read_bytes(AK8963_SENSOR_ADDR, AK8963_CNTL1, &mag_sensitivity_setting, 1);
-
-//     return (mag_sensitivity_setting - 128.0) / 256.0 + 1.0;
-// }
 
 /**
  * Enables the magnetometer bypass mode
