@@ -1,11 +1,16 @@
 /*
     ESP32 code for the MPU-9250 using I2C to communicate (the MPU-9250 has a 3 axis accelerator, 3 axis gyro and a 3 axis magnetometer)
     This code prints out the values from all three MPU-9250 sensors to the console.
-    Note that there is no magnetometer calibration code. Therefore, the accuracy of magnetometer sensor data is limited. 
 
-    RECOMMENDATION: Power the MPU-9250 with 5 volts from the ESP32 (the MPU-9250 magnetometer can freeze, if using 3.3 volts). 
+    Note that there is no magnetometer calibration code. Therefore, the accuracy of magnetometer data is limited. 
+    Also, there is no code for sensor fusion or to properly handle dynamic/acceleration effects. 
 
-    Link to the MPU-9250 module used for this code development:
+    POWER RECOMMENDATION: Power the MPU-9250 with 5 volts from the ESP32 (the MPU-9250 magnetometer can freeze, if using 3.3 volts). 
+
+    Link to the ESP32 module used:
+        https://www.amazon.com/gp/product/B0718T232Z/ref=ppx_yo_dt_b_search_asin_title?ie=UTF8&psc=1
+        
+    Link to the MPU-9250 module used:
         https://www.amazon.com/dp/B01I1J0Z7Y?psc=1&ref=ppx_yo2ov_dt_b_product_details
 
     MPU-9250 hardware specs:
@@ -338,7 +343,7 @@ void mpu9250_task(void *arg) {
                gyro_x_dps, gyro_y_dps, gyro_z_dps, 
                heading, pitch, roll);
 
-                
+
         // float mag_sensitivity = get_mag_sensitivity();  // Each LSB corresponds to 0.15 µT typical value for AK8963 in 16-bit output mode
         // float mag_x_uT = mag_x * mag_sensitivity; // Magnetic field strength in microtesla
         // float mag_y_uT = mag_y * mag_sensitivity; // Magnetic field strength in microtesla
