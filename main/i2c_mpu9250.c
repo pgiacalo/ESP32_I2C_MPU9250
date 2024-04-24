@@ -1,6 +1,7 @@
 /*
     ESP32 code for the MPU-9250 using I2C to communicate (the MPU-9250 has a 3 axis accelerator, 3 axis gyro and a 3 axis magnetometer)
     This code prints out the values from all three MPU-9250 sensors to the console.
+    Note that there is no magnetometer calibration code. Therefore, the accuracy of magnetometer sensor data is limited. 
 
     RECOMMENDATION: Power the MPU-9250 with 5 volts from the ESP32 (the MPU-9250 magnetometer can freeze, if using 3.3 volts). 
 
@@ -22,6 +23,9 @@
 // #include "driver/i2c_master.h"       //use this new driver instead of driver/i2c.h
 #include "esp_system.h"
 #include <math.h>
+
+// Magnetic declination in decimal degrees (adjust this value based on your location)
+const float magnetic_declination = 12.85;      //decimal value in degrees (in San Jose, CA)
 
 #define I2C_MASTER_SCL_IO    19               /*!< gpio number for I2C master clock */
 #define I2C_MASTER_SDA_IO    18               /*!< gpio number for I2C master data  */
@@ -257,10 +261,12 @@ static esp_err_t enable_bypass(void) {
 
 /**
  * @brief Task to continuously read and print out the MPU9250 sensor data
- * Definitions:
- * Heading (or Azimuth): Compass direction where the device is pointing horizontally.
+ * 
+ * Euler angles:
+ * Heading (or Yaw): Compass direction where the device is pointing horizontally.
  * Elevation (or Pitch): Angle of tilt up or down relative to the Earth's surface, pointing the nose up or down.
- * Bank (or Roll): Angle of rotation about the device's forward axis, which is the left or right tilt.
+ * Bank (or Roll): Angle of rotation about the device's forward (x) axis, which is the left or right tilt.
+ * 
  */
 void mpu9250_task(void *arg) {
     uint8_t sensor_data[14];    // Buffer for accelerometer and gyroscope
@@ -310,7 +316,9 @@ void mpu9250_task(void *arg) {
 
         // Calculate heading
         float heading = atan2(-mag_y_comp, mag_x_comp) * (180.0 / M_PI);
-        if (heading < 0) heading += 360; // Normalize heading to be between 0 and 360 degrees
+        heading += magnetic_declination; // Adjust heading for local magnetic declination
+        if (heading > 360) heading -= 360;
+        if (heading < 0) heading += 360; // Normalize heading between 0 and 360 degrees
 
         printf("Accel: X=%.2f G, Y=%.2f G, Z=%.2f G, Gyro: X=%.2f deg/s, Y=%.2f deg/s, Z=%.2f deg/s\n",
                accel_x_g, accel_y_g, accel_z_g, gyro_x_dps, gyro_y_dps, gyro_z_dps);
