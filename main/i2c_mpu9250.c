@@ -21,6 +21,7 @@
 #include "driver/i2c.h"
 // #include "driver/i2c_master.h"       //use this new driver instead of driver/i2c.h
 #include "esp_system.h"
+#include <math.h>
 
 #define I2C_MASTER_SCL_IO    19               /*!< gpio number for I2C master clock */
 #define I2C_MASTER_SDA_IO    18               /*!< gpio number for I2C master data  */
@@ -124,65 +125,6 @@ static esp_err_t mpu9250_read_bytes(uint8_t sensor_addr, uint8_t reg_addr, uint8
     return ret;  // Return the result of the reading phase
 }
 
-/**
- * @brief Task to continuously read sensor data
- */
-void mpu9250_task(void *arg) {
-    uint8_t sensor_data[14];    // Buffer for accelerometer and gyroscope
-    uint8_t mag_data[7];        // Buffer for magnetometer
-    int16_t accel_x, accel_y, accel_z;
-    int16_t gyro_x, gyro_y, gyro_z;
-    int16_t mag_x, mag_y, mag_z;
-
-    // Initialize MPU9250
-    esp_err_t ret = mpu9250_write_byte(MPU9250_SENSOR_ADDR, MPU9250_REG_PWR_MGMT_1, 0x00);  // Wake up the MPU9250
-    if (ret != ESP_OK) {
-        printf("1) Failed to initialize MPU9250 : %s\n", esp_err_to_name(ret));
-    }
-    // Set up the AK8963
-    ret = mpu9250_write_byte(AK8963_SENSOR_ADDR, AK8963_REG_CNTL1, AK8963_BIT_16 | AK8963_MODE_CONTINUOUS_2);
-
-    if (ret != ESP_OK) {
-        printf("2) Failed to initialize MPU9250 : %s\n", esp_err_to_name(ret));
-    }
-
-    /*
-    Converting Raw Sensor Data:
-    To convert raw data from these sensors to standard units, you would typically do the following:
-
-    Gyroscope: Convert ADC counts to degrees per second using the sensitivity setting (e.g., for a ±500 °/s setting, each count could represent 500/32768 degrees per second per count).
-    Accelerometer: Convert ADC counts to G-forces or m/s² using the sensitivity setting (e.g., for a ±2g setting, each count could represent 2/32768 g per count).
-    Magnetometer: Convert ADC counts to microteslas using a factory-calibrated sensitivity that can often be found in the sensor's datasheet or calibration registers.
-    */
-    while (1) {
-        // Read accelerometer and gyroscope data
-        mpu9250_read_bytes(MPU9250_SENSOR_ADDR, MPU9250_REG_ACCEL_XOUT_H, sensor_data, 14);
-
-        // Parse accelerometer data
-        accel_x = (sensor_data[0] << 8) | sensor_data[1];
-        accel_y = (sensor_data[2] << 8) | sensor_data[3];
-        accel_z = (sensor_data[4] << 8) | sensor_data[5];
-
-        // Parse gyroscope data
-        gyro_x = (sensor_data[8] << 8) | sensor_data[9];
-        gyro_y = (sensor_data[10] << 8) | sensor_data[11];
-        gyro_z = (sensor_data[12] << 8) | sensor_data[13];
-
-        // Read magnetometer data
-        mpu9250_read_bytes(AK8963_SENSOR_ADDR, AK8963_REG_HXL, mag_data, 7);
-
-        // Parse magnetometer data (it is little endian) and convert from unsigned to signed values
-        mag_x = (int16_t)((uint16_t)mag_data[1] << 8 | (uint16_t)mag_data[0]);
-        mag_y = (int16_t)((uint16_t)mag_data[3] << 8 | (uint16_t)mag_data[2]);
-        mag_z = (int16_t)((uint16_t)mag_data[5] << 8 | (uint16_t)mag_data[4]);
-
-        printf("Accel: X=%6d, Y=%6d, Z=%6d, Gyro: X=%6d, Y=%6d, Z=%6d, Mag: X=%6d, Y=%6d, Z=%6d\n",
-            accel_x, accel_y, accel_z, gyro_x, gyro_y, gyro_z, mag_x, mag_y, mag_z);
-
-        vTaskDelay(500 / portTICK_PERIOD_MS);
-    }
-}
-
 
 /**
  * @brief Set the full-scale range of the accelerometer. Accelerator range: +/-2G, +/-4G, +/-8G, +/-16G.
@@ -207,6 +149,26 @@ static esp_err_t set_accel_range(uint8_t fs_sel) {
 }
 
 
+// Function to get accelerometer sensitivity
+float get_accel_sensitivity() {
+    uint8_t accel_sensitivity_setting;
+    mpu9250_read_bytes(MPU9250_SENSOR_ADDR, ACCEL_CONFIG, &accel_sensitivity_setting, 1);
+
+    switch (accel_sensitivity_setting & 0x18) {
+        case 0x00:  // ±2g
+            return 2.0 / 32768.0;
+        case 0x08:  // ±4g
+            return 4.0 / 32768.0;
+        case 0x10:  // ±8g
+            return 8.0 / 32768.0;
+        case 0x18:  // ±16g
+            return 16.0 / 32768.0;
+        default:
+            return 2.0 / 32768.0;  // Default sensitivity
+    }
+}
+
+
 /**
  * @brief Set the full-scale range of the gyroscope. Gyro range: +/-250, +/-500, +/-1000, +/-2000dps.
  * @param fs_sel Full-scale range selection (0=±250°/s, 1=±500°/s, 2=±1000°/s, 3=±2000°/s)
@@ -227,6 +189,25 @@ static esp_err_t set_gyro_range(uint8_t fs_sel) {
     }
     return ret;
 
+}
+
+// Function to get gyroscope sensitivity
+float get_gyro_sensitivity() {
+    uint8_t gyro_sensitivity_setting;
+    mpu9250_read_bytes(MPU9250_SENSOR_ADDR, GYRO_CONFIG, &gyro_sensitivity_setting, 1);
+
+    switch (gyro_sensitivity_setting & 0x18) {
+        case 0x00:  // ±250 °/s
+            return 250.0 / 32768.0;
+        case 0x08:  // ±500 °/s
+            return 500.0 / 32768.0;
+        case 0x10:  // ±1000 °/s
+            return 1000.0 / 32768.0;
+        case 0x18:  // ±2000 °/s
+            return 2000.0 / 32768.0;
+        default:
+            return 250.0 / 32768.0;  // Default sensitivity
+    }
 }
 
 
@@ -258,12 +239,89 @@ static esp_err_t set_ak8963_mode(uint8_t mode) {
     return ret;
 }
 
+// Function to get magnetometer sensitivity
+float get_mag_sensitivity() {
+    uint8_t mag_sensitivity_setting;
+    mpu9250_read_bytes(AK8963_SENSOR_ADDR, AK8963_CNTL1, &mag_sensitivity_setting, 1);
+
+    return (mag_sensitivity_setting - 128.0) / 256.0 + 1.0;
+}
+
 /**
  * Enables the magnetometer bypass mode
  */
 static esp_err_t enable_bypass(void) {
     return mpu9250_write_byte(MPU9250_SENSOR_ADDR, 0x37, 0x02);  // INT_PIN_CFG register set to enable bypass mode
 }
+
+
+/**
+ * @brief Task to continuously read and print out the MPU9250 sensor data
+ * Definitions:
+ * Heading (or Azimuth): Compass direction where the device is pointing horizontally.
+ * Elevation (or Pitch): Angle of tilt up or down relative to the Earth's surface, pointing the nose up or down.
+ * Bank (or Roll): Angle of rotation about the device's forward axis, which is the left or right tilt.
+ */
+void mpu9250_task(void *arg) {
+    uint8_t sensor_data[14];    // Buffer for accelerometer and gyroscope
+    uint8_t mag_data[7];        // Buffer for magnetometer
+    int16_t accel_x, accel_y, accel_z;
+    int16_t gyro_x, gyro_y, gyro_z;
+    int16_t mag_x, mag_y, mag_z;
+    
+    float accel_sensitivity = get_accel_sensitivity();
+    float gyro_sensitivity = get_gyro_sensitivity();
+    float mag_sensitivity = get_mag_sensitivity();  // Each LSB corresponds to 0.15 µT typical value for AK8963 in 16-bit output mode
+
+    while (1) {
+        // Read accelerometer, gyroscope, and magnetometer data
+        mpu9250_read_bytes(MPU9250_SENSOR_ADDR, MPU9250_REG_ACCEL_XOUT_H, sensor_data, 14);
+        mpu9250_read_bytes(AK8963_SENSOR_ADDR, AK8963_REG_HXL, mag_data, 7);
+
+        // Parse data from sensors
+        accel_x = (sensor_data[0] << 8) | sensor_data[1];
+        accel_y = (sensor_data[2] << 8) | sensor_data[3];
+        accel_z = (sensor_data[4] << 8) | sensor_data[5];
+        gyro_x = (sensor_data[8] << 8) | sensor_data[9];
+        gyro_y = (sensor_data[10] << 8) | sensor_data[11];
+        gyro_z = (sensor_data[12] << 8) | sensor_data[13];
+        mag_x = (int16_t)((uint16_t)mag_data[1] << 8 | (uint16_t)mag_data[0]);
+        mag_y = (int16_t)((uint16_t)mag_data[3] << 8 | (uint16_t)mag_data[2]);
+        mag_z = (int16_t)((uint16_t)mag_data[5] << 8 | (uint16_t)mag_data[4]);
+
+        // Convert raw data to logical values with units
+        float accel_x_g = accel_x * accel_sensitivity;
+        float accel_y_g = accel_y * accel_sensitivity;
+        float accel_z_g = accel_z * accel_sensitivity;
+        float gyro_x_dps = gyro_x * gyro_sensitivity; // Angular velocity in degrees per second
+        float gyro_y_dps = gyro_y * gyro_sensitivity; // Angular velocity in degrees per second
+        float gyro_z_dps = gyro_z * gyro_sensitivity; // Angular velocity in degrees per second
+        float mag_x_uT = mag_x * mag_sensitivity; // Magnetic field strength in microtesla
+        float mag_y_uT = mag_y * mag_sensitivity; // Magnetic field strength in microtesla
+        float mag_z_uT = mag_z * mag_sensitivity; // Magnetic field strength in microtesla
+
+        // Calculate roll and pitch
+        float roll = atan2(accel_y_g, accel_z_g) * (180.0 / M_PI);
+        float pitch = atan2(-accel_x_g, sqrt(accel_y_g * accel_y_g + accel_z_g * accel_z_g)) * (180.0 / M_PI);
+
+        // Calculate tilt compensated magnetic field components
+        float mag_x_comp = mag_x * cos(pitch) + mag_z * sin(pitch);
+        float mag_y_comp = mag_x * sin(roll) * sin(pitch) + mag_y * cos(roll) - mag_z * sin(roll) * cos(pitch);
+
+        // Calculate heading
+        float heading = atan2(-mag_y_comp, mag_x_comp) * (180.0 / M_PI);
+        if (heading < 0) heading += 360; // Normalize heading to be between 0 and 360 degrees
+
+        printf("Accel: X=%.2f G, Y=%.2f G, Z=%.2f G, Gyro: X=%.2f deg/s, Y=%.2f deg/s, Z=%.2f deg/s\n",
+               accel_x_g, accel_y_g, accel_z_g, gyro_x_dps, gyro_y_dps, gyro_z_dps);
+        printf("Mag: X=%.2f uT, Y=%.2f uT, Z=%.2f uT, Heading=%.2f°, Elevation=%.2f°, Bank=%.2f°\n",
+               mag_x_uT, mag_y_uT, mag_z_uT, heading, pitch, roll);
+
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+    }
+}
+
+
 
 
 void app_main(void) {
