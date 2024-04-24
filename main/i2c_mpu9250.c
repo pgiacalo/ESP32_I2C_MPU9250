@@ -294,7 +294,6 @@ void mpu9250_task(void *arg) {
     
     float accel_sensitivity = get_accel_sensitivity();
     float gyro_sensitivity = get_gyro_sensitivity();
-    float mag_sensitivity = get_mag_sensitivity();  // Each LSB corresponds to 0.15 µT typical value for AK8963 in 16-bit output mode
 
     while (1) {
         // Read accelerometer, gyroscope, and magnetometer data
@@ -319,9 +318,6 @@ void mpu9250_task(void *arg) {
         float gyro_x_dps = gyro_x * gyro_sensitivity; // Angular velocity in degrees per second
         float gyro_y_dps = gyro_y * gyro_sensitivity; // Angular velocity in degrees per second
         float gyro_z_dps = gyro_z * gyro_sensitivity; // Angular velocity in degrees per second
-        float mag_x_uT = mag_x * mag_sensitivity; // Magnetic field strength in microtesla
-        float mag_y_uT = mag_y * mag_sensitivity; // Magnetic field strength in microtesla
-        float mag_z_uT = mag_z * mag_sensitivity; // Magnetic field strength in microtesla
 
         // Calculate roll and pitch
         float roll = atan2(accel_y_g, accel_z_g) * (180.0 / M_PI);
@@ -337,10 +333,17 @@ void mpu9250_task(void *arg) {
         if (heading > 360) heading -= 360;
         if (heading < 0) heading += 360; // Normalize heading between 0 and 360 degrees
 
-        printf("Accel: X=%.2f G, Y=%.2f G, Z=%.2f G, Gyro: X=%.2f deg/s, Y=%.2f deg/s, Z=%.2f deg/s\n",
-               accel_x_g, accel_y_g, accel_z_g, gyro_x_dps, gyro_y_dps, gyro_z_dps);
-        printf("Mag: X=%.2f uT, Y=%.2f uT, Z=%.2f uT, Heading=%.2f°, Elevation=%.2f°, Bank=%.2f°\n",
-               mag_x_uT, mag_y_uT, mag_z_uT, heading, pitch, roll);
+        printf("Accel: X=%.2f G, Y=%.2f G, Z=%.2f G, Gyro: X=%.2f deg/s, Y=%.2f deg/s, Z=%.2f deg/s, Heading=%.2f°, Pitch=%.2f°, Roll=%.2f°\n",
+               accel_x_g, accel_y_g, accel_z_g, gyro_x_dps, gyro_y_dps, gyro_z_dps, heading, pitch, roll);
+                
+        // float mag_sensitivity = get_mag_sensitivity();  // Each LSB corresponds to 0.15 µT typical value for AK8963 in 16-bit output mode
+        // float mag_x_uT = mag_x * mag_sensitivity; // Magnetic field strength in microtesla
+        // float mag_y_uT = mag_y * mag_sensitivity; // Magnetic field strength in microtesla
+        // float mag_z_uT = mag_z * mag_sensitivity; // Magnetic field strength in microtesla
+        // printf("Accel: X=%.2f G, Y=%.2f G, Z=%.2f G, Gyro: X=%.2f deg/s, Y=%.2f deg/s, Z=%.2f deg/s\n",
+        //        accel_x_g, accel_y_g, accel_z_g, gyro_x_dps, gyro_y_dps, gyro_z_dps);
+        // printf("Mag: X=%.2f uT, Y=%.2f uT, Z=%.2f uT, Heading=%.2f°, Elevation=%.2f°, Bank=%.2f°\n",
+        //        mag_x_uT, mag_y_uT, mag_z_uT, heading, pitch, roll);
 
         vTaskDelay(500 / portTICK_PERIOD_MS);
     }
