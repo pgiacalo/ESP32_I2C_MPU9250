@@ -350,7 +350,7 @@ void app_main(void) {
     // Set gyroscope to default range ±250 degrees/s
     set_gyro_range(0);  // 0b00 corresponds to ±250°/s
 
-    // Set magnetometer
+    // Set magnetometer bypass mode (***NOTE: See the note below this code for a further explanation
     enable_mag_bypass(); // Call this after initializing the I2C and before setting the AK8963 mode
     // Set AK8963 to Continuous Measurement Mode 2
     set_mag_mode_and_resolution(AK8963_MODE_CONTINUOUS_2, true);   //true means high resolution (16 bit)
@@ -358,3 +358,25 @@ void app_main(void) {
     // Create the task to handle MPU9250 data reading and processing
     xTaskCreate(mpu9250_task, "mpu9250_task", 4096, NULL, 10, NULL);
 }
+
+
+/*
+ ***NOTE about bypass mode: 
+
+### Understanding Bypass Mode:
+
+The MPU-9250 is a complex module that integrates a 3-axis accelerometer, a 3-axis gyroscope, and a 3-axis magnetometer (AK8963). The accelerometer and gyroscope are directly accessible via the primary I2C bus of the MPU-9250, but the AK8963 magnetometer communicates through a secondary I2C interface that is typically managed by the MPU-9250's main controller.
+
+Here’s why the `enable_mag_bypass()` function is necessary:
+
+1. **Bypass Enable**: By writing `0x02` to the `INT_PIN_CFG` register (`0x37`) of the MPU-9250, you activate the bypass mode. This mode configures the MPU-9250 to pass through the I2C master signals directly to the I2C slave bus. This is essential because it allows the external microcontroller (in your case, the ESP32) to communicate directly with the AK8963 magnetometer.
+
+2. **Direct Communication**: Without enabling bypass mode, the AK8963 magnetometer is not accessible on the primary I2C bus used by the MPU-9250. Enabling bypass mode effectively disconnects the MPU-9250 from acting as a master controller to the AK8963, allowing direct I2C communication from your main microcontroller to the magnetometer.
+
+3. **Operational Necessity**: If you don’t activate this bypass mode, any attempts to communicate with the AK8963 will fail because the MPU-9250 will not forward your I2C commands from the primary to the secondary I2C bus where the AK8963 resides. Consequently, you won’t be able to configure the magnetometer, read its data, or perform any other operation on the AK8963.
+
+### Practical Implications:
+Enabling bypass mode is particularly important in setups where you need fine control over the magnetometer or when you are using libraries or code that assume direct access to all three sensors (accelerometer, gyroscope, and magnetometer) via the same I2C bus. This is a common scenario in DIY projects, robotics, and other applications involving orientation tracking or navigation.
+
+Therefore, calling `enable_mag_bypass()` is not just a supplementary step; it's a fundamental requirement to ensure that your MPU-9250’s magnetometer provides usable data.
+*/
