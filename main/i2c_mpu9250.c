@@ -55,6 +55,7 @@ const float magnetic_declination = 12.85;      //in San Jose, CA
 #define AK8963_REG_CNTL1         0x0A
 #define AK8963_REG_HXL           0x03
 #define AK8963_MODE_CONTINUOUS_2 0x06  /*!< 100Hz continuous measurement mode */
+#define AK8963_BIT_14            0x00  /*!< Output 14-bit magnetometer data */
 #define AK8963_BIT_16            0x10  /*!< Output 16-bit magnetometer data */
 
 // Sensor register addresses within the MPU9250 and the AK8963 sensor (which is the magnetometer component of the MPU9250 system).
@@ -219,9 +220,9 @@ float get_gyro_sensitivity() {
  * Example: set_ak8963_mode(0x06, true);  //set the AK8963 to continuous measurement mode 2 at 16 bit resolution
  */
 static esp_err_t set_mag_mode_and_resolution(uint8_t mode, bool high_resolution) {
-    uint8_t mode_and_resolution = mode | 0x00; // Default to 14-bit resolution
+    uint8_t mode_and_resolution = mode | AK8963_BIT_14; // Default to 14-bit resolution
     if (high_resolution) {
-        mode_and_resolution = mode | 0x10; // Set to 16-bit resolution
+        mode_and_resolution = mode | AK8963_BIT_16;     // Set to 16-bit resolution
     }
 
     // Reset AK8963
@@ -241,13 +242,20 @@ static esp_err_t set_mag_mode_and_resolution(uint8_t mode, bool high_resolution)
 //NOTE: There is no magnetometer set_range() function because the AK8963 operates at a fixed range of ±4800 µT (microteslas).
 /////////
 
-// Function to get magnetometer sensitivity
+/** 
+ * Function to get the magnetometer sensitivity in µT/LSB
+ * 
+ * For the AK8963, the sensitivity values are determined through factory calibration 
+ * and are specified in the datasheet as constants for each mode:
+ *  16-bit mode: 0.15 microteslas per least significant bit (µT/LSB)
+ *  14-bit mode: 0.6 microteslas per least significant bit (µT/LSB)
+*/
 float get_mag_sensitivity() {
     uint8_t resolution_setting;
     mpu9250_read_bytes(AK8963_SENSOR_ADDR, AK8963_REG_CNTL1, &resolution_setting, 1);
 
     // Determine if using 16-bit output (0x10) or defaulting to 14-bit
-    if ((resolution_setting & 0x10) == 0x10) {
+    if ((resolution_setting & AK8963_BIT_16) == AK8963_BIT_16) {
         return 0.15; // Sensitivity for 16-bit output in µT/LSB
     } else {
         return 0.6; // Sensitivity for 14-bit output in µT/LSB (default)
@@ -258,9 +266,9 @@ float get_mag_sensitivity() {
  * Enables the magnetometer bypass mode
  */
 static esp_err_t enable_mag_bypass(void) {
-    return mpu9250_write_byte(MPU9250_SENSOR_ADDR, 0x37, 0x02);  // INT_PIN_CFG register set to enable bypass mode
+    // activate bypass mode by writing `0x02` to `INT_PIN_CFG` register (`0x37`) of the MPU-9250 
+    return mpu9250_write_byte(MPU9250_SENSOR_ADDR, 0x37, 0x02);
 }
-
 
 /**
  * @brief Task to continuously read and print out the MPU9250 sensor data
