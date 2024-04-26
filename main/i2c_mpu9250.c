@@ -449,6 +449,12 @@ void calibrate_sensors(SensorCalibration *calib) {
         gyro_total[1] += (int16_t)((sensor_data[10] << 8) | sensor_data[11]);
         gyro_total[2] += (int16_t)((sensor_data[12] << 8) | sensor_data[13]);
 
+        int countdown = samples - i; // Decrementing countdown
+        if (countdown % 10 == 0){
+            printf("\rSamples remaining: %d    ", countdown);
+            fflush(stdout); // Ensure the buffer is flushed immediately         
+        }
+
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 
@@ -474,6 +480,12 @@ void calibrate_sensors(SensorCalibration *calib) {
         if (mx > mag_max[0]) mag_max[0] = mx;
         if (my > mag_max[1]) mag_max[1] = my;
         if (mz > mag_max[2]) mag_max[2] = mz;
+
+        int countdown = mag_samples - i; // Decrementing countdown
+        if (countdown % 10 == 0){
+            printf("\rSamples remaining: %d    ", countdown);
+            fflush(stdout); // Ensure the buffer is flushed immediately         
+        }
 
         vTaskDelay(pdMS_TO_TICKS(50));
     }
