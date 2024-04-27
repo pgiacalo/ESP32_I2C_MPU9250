@@ -121,14 +121,21 @@
 #define GYRO_CONFIG 0x1B
 #define AK8963_CNTL1 0x0A
 
+//used during magnetometer calibration to assure sufficient range coverage
+#define NUM_LATITUDE_BINS 6
+#define NUM_LONGITUDE_BINS 12
+#define MIN_POINTS_PER_BIN 10
+
 //=============================================================
 //================== CONFIGURATION CONSTANTS ==================  
 //=============================================================
 
+static const bool DEBUG = true;
+
 static const bool REQUIRE_CALIBRATION               = true;
 
 // Magnetic declination in decimal degrees (adjust this value based on your location)
-static const float CONFIG_MAGNETIC_DECLINATION      = 12.85; //in San Jose, CA
+static const float CONFIG_MAGNETIC_DECLINATION      = 0.0;  //12.85; //in San Jose, CA
 
 static const float CONFIG_MAGNETOMETER_RESOLUTION   = AK8963_BIT_16;
 
@@ -140,6 +147,7 @@ static const float CONFIG_GYRO_RANGE                = GYRO_RANGE_250_DPS;
 
 static const char *TAG = "SensorTask";
 
+
 //struct to hold sensor calibration data
 typedef struct {
     int16_t accel_offset[3];
@@ -147,6 +155,23 @@ typedef struct {
     int16_t mag_offset[3];
     float mag_scale[3];  // Use float for scale to handle fractional values
 } SensorCalibration;
+
+// Utility function to determine which bin a vector belongs to based on its spherical coordinates
+void get_spherical_bin(int16_t x, int16_t y, int16_t z, int *lat_bin, int *long_bin) {
+    double r = sqrt(x*x + y*y + z*z);
+    double theta = acos(z / r); // polar angle
+    double phi = atan2(y, x); // azimuthal angle
+
+    // Normalize angles into bin indices
+    *lat_bin = (int)(NUM_LATITUDE_BINS * theta / M_PI);
+    *long_bin = (int)(NUM_LONGITUDE_BINS * (phi + M_PI) / (2 * M_PI));
+
+    // if (DEBUG){
+    //     printf("mx: %d, my: %d, mz: %d, r: %f, theta: %f, phi: %f, lat_bin: %d, long_bin: %d\n",
+    //            x, y, z, r, theta, phi, *lat_bin, *long_bin);            
+    // }
+
+}
 
 /**
  * @brief i2c master initialization
@@ -405,7 +430,7 @@ void mpu9250_task(void *calibration) {
         float mag_x_comp = mag_x * cos(pitch) + mag_z * sin(pitch);
         float mag_y_comp = mag_x * sin(roll) * sin(pitch) + mag_y * cos(roll) - mag_z * sin(roll) * cos(pitch);
 
-        // Calculate heading
+        // Calculate heading using tilt compensated values
         float heading = atan2(-mag_y_comp, mag_x_comp) * (180.0 / M_PI);
         heading += CONFIG_MAGNETIC_DECLINATION; // Adjust heading for local magnetic declination
         if (heading > 360) heading -= 360;
@@ -418,6 +443,109 @@ void mpu9250_task(void *calibration) {
 
         vTaskDelay(500 / portTICK_PERIOD_MS);
     }
+}
+
+void calibrate_magnetometer(SensorCalibration *calib) {
+
+    ESP_LOGI(TAG, "=======================================================================================");
+    ESP_LOGI(TAG, "Rotate the sensor device through its full range of motion for magnetometer calibration.");
+    ESP_LOGI(TAG, "=======================================================================================");
+    
+    int bins[NUM_LATITUDE_BINS][NUM_LONGITUDE_BINS] = {0};
+    int16_t mag_min[3] = {INT16_MAX, INT16_MAX, INT16_MAX};
+    int16_t mag_max[3] = {INT16_MIN, INT16_MIN, INT16_MIN};
+    uint8_t sensor_data[7];
+    bool sufficient_coverage = false;
+    int total_samples = 0;
+
+    while (!sufficient_coverage) {
+        mpu9250_read_bytes(AK8963_SENSOR_ADDR, AK8963_REG_HXL, sensor_data, 7);
+        int16_t mx = (int16_t)((sensor_data[1] << 8) | sensor_data[0]);
+        int16_t my = (int16_t)((sensor_data[3] << 8) | sensor_data[2]);
+        int16_t mz = (int16_t)((sensor_data[5] << 8) | sensor_data[4]);
+
+        if (DEBUG){
+            printf("Raw MAG Data - mx: %d, my: %d, mz: %d\n", mx, my, mz);
+        }
+
+        // Update min/max
+        if (mx < mag_min[0]) mag_min[0] = mx;
+        if (my < mag_min[1]) mag_min[1] = my;
+        if (mz < mag_min[2]) mag_min[2] = mz;
+        if (mx > mag_max[0]) mag_max[0] = mx;
+        if (my > mag_max[1]) mag_max[1] = my;
+        if (mz > mag_max[2]) mag_max[2] = mz;
+
+        int lat_bin, long_bin;
+        get_spherical_bin(mx, my, mz, &lat_bin, &long_bin);
+        bins[lat_bin][long_bin]++;
+        total_samples++;
+
+        // Check for sufficient coverage
+        sufficient_coverage = true;
+        for (int i = 0; i < NUM_LATITUDE_BINS; i++) {
+            for (int j = 0; j < NUM_LONGITUDE_BINS; j++) {
+                if (bins[i][j] < MIN_POINTS_PER_BIN) {
+                    sufficient_coverage = false;
+                    break;
+                }
+            }
+            if (!sufficient_coverage) break;
+        }
+        
+        printf("\rTotal samples: %d, Segment (%d,%d) count: %d", total_samples, lat_bin, long_bin, bins[lat_bin][long_bin]);
+        fflush(stdout);
+
+        if (total_samples % 50 == 0) {
+            printf("\nChecking coverage... ");
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(50));  // Delay to limit sample rate
+
+
+        // ESP_LOGI(TAG, "=======================================================================================");
+        // ESP_LOGI(TAG, "Rotate the sensor device through its full range of motion for magnetometer calibration.");
+        // ESP_LOGI(TAG, "=======================================================================================");
+
+        // int mag_samples = 500;
+        // for (int i = 0; i < mag_samples; i++) {
+        //     mpu9250_read_bytes(AK8963_SENSOR_ADDR, AK8963_REG_HXL, sensor_data, 7);
+        //     int16_t mx = (int16_t)((sensor_data[1] << 8) | sensor_data[0]);
+        //     int16_t my = (int16_t)((sensor_data[3] << 8) | sensor_data[2]);
+        //     int16_t mz = (int16_t)((sensor_data[5] << 8) | sensor_data[4]);
+
+        //     mag_total[0] += mx;
+        //     mag_total[1] += my;
+        //     mag_total[2] += mz;
+
+        //     if (mx < mag_min[0]) mag_min[0] = mx;
+        //     if (my < mag_min[1]) mag_min[1] = my;
+        //     if (mz < mag_min[2]) mag_min[2] = mz;
+
+        //     if (mx > mag_max[0]) mag_max[0] = mx;
+        //     if (my > mag_max[1]) mag_max[1] = my;
+        //     if (mz > mag_max[2]) mag_max[2] = mz;
+
+        //     int countdown = mag_samples - i; // Decrementing countdown
+        //     if (countdown % 10 == 0){
+        //         printf("\rCalibration samples remaining: %d    ", countdown);
+        //         fflush(stdout); // Ensure the buffer is flushed immediately         
+        //     }
+
+        //     vTaskDelay(pdMS_TO_TICKS(50));
+        // }
+        // printf("\n"); // Add a newline after the loop completes
+    }
+
+    // Compute calibration parameters
+    for (int i = 0; i < 3; i++) {
+        calib->mag_offset[i] = (mag_min[i] + mag_max[i]) / 2; // Midpoint offset
+        int16_t range = mag_max[i] - mag_min[i];
+        calib->mag_scale[i] = (range > 0) ? (4912.0 / range) : 0; // Example Earth's magnetic field strength in nT
+    }
+
+    printf("\nCalibration complete with sufficient coverage. Offsets: %d, %d, %d\n",
+           calib->mag_offset[0], calib->mag_offset[1], calib->mag_offset[2]);
 }
 
 /**
@@ -433,7 +561,7 @@ void calibrate_sensors(SensorCalibration *calib) {
     uint8_t sensor_data[14];
     int32_t accel_total[3] = {0};
     int32_t gyro_total[3] = {0};
-    int32_t mag_total[3] = {0};
+    // int32_t mag_total[3] = {0};
     int16_t mag_min[3] = {INT16_MAX, INT16_MAX, INT16_MAX};
     int16_t mag_max[3] = {INT16_MIN, INT16_MIN, INT16_MIN};
 
@@ -451,44 +579,17 @@ void calibrate_sensors(SensorCalibration *calib) {
 
         int countdown = samples - i; // Decrementing countdown
         if (countdown % 10 == 0){
-            printf("\rSamples remaining: %d    ", countdown);
+            printf("\rCalibration samples remaining: %d    ", countdown);
             fflush(stdout); // Ensure the buffer is flushed immediately         
         }
 
         vTaskDelay(pdMS_TO_TICKS(100));
     }
+    printf("\n"); // Add a newline after the loop completes
 
-    ESP_LOGI(TAG, "=======================================================================================");
-    ESP_LOGI(TAG, "Rotate the sensor device through its full range of motion for magnetometer calibration.");
-    ESP_LOGI(TAG, "=======================================================================================");
-
-    int mag_samples = 500;
-    for (int i = 0; i < mag_samples; i++) {
-        mpu9250_read_bytes(AK8963_SENSOR_ADDR, AK8963_REG_HXL, sensor_data, 7);
-        int16_t mx = (int16_t)((sensor_data[1] << 8) | sensor_data[0]);
-        int16_t my = (int16_t)((sensor_data[3] << 8) | sensor_data[2]);
-        int16_t mz = (int16_t)((sensor_data[5] << 8) | sensor_data[4]);
-
-        mag_total[0] += mx;
-        mag_total[1] += my;
-        mag_total[2] += mz;
-
-        if (mx < mag_min[0]) mag_min[0] = mx;
-        if (my < mag_min[1]) mag_min[1] = my;
-        if (mz < mag_min[2]) mag_min[2] = mz;
-
-        if (mx > mag_max[0]) mag_max[0] = mx;
-        if (my > mag_max[1]) mag_max[1] = my;
-        if (mz > mag_max[2]) mag_max[2] = mz;
-
-        int countdown = mag_samples - i; // Decrementing countdown
-        if (countdown % 10 == 0){
-            printf("\rSamples remaining: %d    ", countdown);
-            fflush(stdout); // Ensure the buffer is flushed immediately         
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(50));
-    }
+    //============================
+    calibrate_magnetometer(calib);
+    //============================
 
     //the MPU9250 has a 16 bit ADC (32768 sensor counts)
     int acceleromter_range =  pow(2.0, (CONFIG_ACCELEROMETER_RANGE + 1));
@@ -515,6 +616,8 @@ void calibrate_sensors(SensorCalibration *calib) {
              calib->gyro_offset[0], calib->gyro_offset[1], calib->gyro_offset[2],
              calib->mag_offset[0], calib->mag_offset[1], calib->mag_offset[2]);
 }
+
+
 
 void app_main(void) {
     // Initialize the I2C bus for communication
